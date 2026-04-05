@@ -1,7 +1,8 @@
+#autorun order v1.0.3
 from flask import Flask, request, abort
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
-from linebot.models import MessageEvent, TextMessage, TextSendMessage
+from linebot.models import MessageEvent, TextMessage, TextSendMessage, ImageSendMessage
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import re
@@ -10,15 +11,19 @@ from datetime import datetime, timedelta, timezone
 app = Flask(__name__)
 
 # ==========================================
-# 🔑 1. กุญแจการเชื่อมต่อ
+# 🔑 1. กุญแจการเชื่อมต่อ & ตั้งค่ารูปภาพ
 # ==========================================
 line_bot_api = LineBotApi('msJOEakMwWxKn47C/KxhCoTAsomDcRDMK42aYVIzsuUhdaTFiLcWFBgUxbuUZtCsCL974XM/ftwTaDmS5ykI/AwmOUoVq43plbGJelanbLSb0ty5NB8rWNO+qDso2LpFU2C2Q4pDknV/eX2C9DgaMgdB04t89/1O/w1cDnyilFU=')
+
 handler = WebhookHandler('738e20aeda95ff8d4037bfe193b1626f')
+
+# ลิงก์รูปภาพน้องแมวคอนเฟิร์มงาน (เปลี่ยนลิงก์ตรงนี้ได้เลยถ้าในอนาคตอยากเปลี่ยนรูป)
+cat_image_url = "https://i.postimg.cc/T2qDgNdr/87255.jpg"
 
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
 client = gspread.authorize(creds)
-sheet_id = "1AX07eQB9tE7dwQrnN44DS2_CgUtQ7JzjRkMgHzOP0Y4" 
+sheet_id = "1AX07eQB9tE7dwQrnN44DS2_CgUtQ7JzjRkMgHzOP0Y4"
 
 # เชื่อมต่อแผ่นงาน (Tabs)
 sheet_curtain = client.open_by_key(sheet_id).worksheet("ผ้าม่าน")
@@ -175,9 +180,11 @@ def process_curtain_order(msg, last_real_order, last_date_in_sheet):
 # ==========================================
 # 📡 5. ท่อรับส่งข้อมูล (Webhook)
 # ==========================================
+
 @app.route("/", methods=['GET'])
 def home():
     return "Bot is running 24/7!"
+
 @app.route("/callback", methods=['POST'])
 def callback():
     signature = request.headers['X-Line-Signature']
@@ -206,14 +213,21 @@ def handle_message(event):
                 final_row, notification = result
                 final_row.append(timestamp) # เติมเวลาเข้าไปเป็นคอลัมน์ที่ 12 (L)
                 
-                if notification:
-                    line_bot_api.reply_message(event.reply_token, TextSendMessage(text=notification))
-                
+                # 1. บันทึกลง Sheet ให้เสร็จก่อน
                 sheet_glass.append_row(final_row, value_input_option='USER_ENTERED')
-                print(f"บันทึกงานกระจก: {final_row[2]} แล้วครับ ")
+                print(f"✅ บันทึกงานกระจกสำเร็จ: {final_row[2]}")
+                
+                # 2. เตรียมข้อความและรูปภาพตอบกลับ
+                reply_messages = []
+                if notification:
+                    reply_messages.append(TextSendMessage(text=notification))
+                reply_messages.append(ImageSendMessage(original_content_url=cat_image_url, preview_image_url=cat_image_url))
+                
+                # 3. สั่งให้ LINE ส่งข้อความทั้งหมดกลับไปที่กลุ่ม
+                line_bot_api.reply_message(event.reply_token, reply_messages)
 
         # ====== 🟩 ตรวจสอบว่าเป็นงานผ้าม่าน ======
-        elif "เลขที่ออเดอร์ :" in user_text: # ถ้าไม่มีซองแดง ให้ถือเป็นผ้าม่าน
+        elif "เลขที่ออเดอร์ :" in user_text:
             last_row = sheet_curtain.get_all_values()[-1] if len(sheet_curtain.get_all_values()) > 1 else None
             last_date = last_row[0] if last_row else None
             last_order = last_row[2] if last_row else None
@@ -223,11 +237,18 @@ def handle_message(event):
                 final_row, notification = result
                 final_row.append(timestamp) # เติมเวลาเข้าไปเป็นคอลัมน์ที่ 13 (M)
                 
-                if notification:
-                    line_bot_api.reply_message(event.reply_token, TextSendMessage(text=notification))
-                
+                # 1. บันทึกลง Sheet ให้เสร็จก่อน
                 sheet_curtain.append_row(final_row, value_input_option='USER_ENTERED')
-                print(f"บันทึกงานผ้าม่าน: {final_row[2]} แล้วครับ")
+                print(f"✅ บันทึกงานผ้าม่านสำเร็จ: {final_row[2]}")
+                
+                # 2. เตรียมข้อความและรูปภาพตอบกลับ
+                reply_messages = []
+                if notification:
+                    reply_messages.append(TextSendMessage(text=notification))
+                reply_messages.append(ImageSendMessage(original_content_url=cat_image_url, preview_image_url=cat_image_url))
+                
+                # 3. สั่งให้ LINE ส่งข้อความทั้งหมดกลับไปที่กลุ่ม
+                line_bot_api.reply_message(event.reply_token, reply_messages)
 
     except Exception as e:
         print(f"❌ Error: {str(e)}")
