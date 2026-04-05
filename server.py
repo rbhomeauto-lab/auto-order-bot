@@ -175,7 +175,9 @@ def process_curtain_order(msg, last_real_order, last_date_in_sheet):
 # ==========================================
 # 📡 5. ท่อรับส่งข้อมูล (Webhook)
 # ==========================================
-
+@app.route("/", methods=['GET'])
+def home():
+    return "Bot is running 24/7!"
 @app.route("/callback", methods=['POST'])
 def callback():
     signature = request.headers['X-Line-Signature']
